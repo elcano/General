@@ -3,21 +3,18 @@ namespace common {bool checksum(char* msg);}
 
 namespace elcano
 {
-// latitude and longitude are multiplied by 1,000,000.
-// (47.621300, -122.350900) is Seattle Center House.
-#define LATITUDE_ORIGIN   47.621300
-#define LONGITUDE_ORIGIN -122.350900
 #define EARTH_RADIUS_MM 6371000000.
 #define PIf ((float) 3.1415926)
-#define PId 3.14159265358979
-																														//#define PI ((float) 3.1415925)
-#define TO_RADIANS (PId/180.)
-#define COS_LAT (cos(((double) LATITUDE_ORIGIN)/1000000. * TO_RADIANS))
+#define TO_RADIANS (PIf/180.)
+#define HEADING_PRECISION 1000000.0
+#define DR_ERROR_mm 1000.0
+
 // The buffer size that will hold a GPS sentence. They tend to be 80 characters long.
 // Got weird results with 90; OK with 120.
 #define BUFFSIZ 120
-#define MAX_MISSION 6
+#define MAX_MISSION 6 //The maximum number of target goal to hit
 #define MEG 1000000
+#define MAX_MAPS 10    //The maximum number of map files stored to SD card
 #define MAX_WAYPOINTS 40   // The maximum number of waypoints in each map file.
 
 // setting of index to indicate a navigation fix
@@ -37,13 +34,24 @@ namespace elcano
 // but we send a number from 0 to 255
 #define STANDARD_ACCEL       55
 #define MAX_ACCEL            110
-#define HALF_BRAKE           127
-#define FULL_BRAKE           255
 #define WALK_SPEED_mmPs      1000
 // 10 mph = 4.44 m/s
 #define MAX_SPEED_mmPs       4444
 
-
+class Origin
+{
+public:
+	double latitude;
+	double longitude;
+    
+    float cos_lat;
+    
+    Origin(){} //Defualt constructor
+    
+    //constructor for hardcoding Origin in global scope
+    //cos_lat will be initialized depending on latDeg and latMin
+    Origin(double lat, double log);
+};
 
 class waypoint // best estimate of position and state
 // used either for a waypoint or a measured navigational fix
@@ -52,11 +60,11 @@ class waypoint // best estimate of position and state
     // Since the Arduino supports only 6 digits of precision in float/double,
     // all latitudes and longitudes are recorded as integers.
     // The (east_mm and north_mm) position carries more precision.
-    long latitude;   //  DDFFFFFF; 6 digits after virtual decimal point
-    long longitude;  // DDDFFFFFF
-    long east_mm;  // x is east; max is 2147 km
+		double latitude;
+		double longitude;
+    long east_mm;  	// x is east; max is 2147 km
     long north_mm;  // y is true north
-    long sigma_mm; // standard deviation of position.
+    long sigma_mm = 3000; // standard deviation of position for GPS. 
     unsigned long time_ms;   // time of reading since start_time, start_date  
     // millis() + offset_ms = waypoint.time_ms
   /*
@@ -66,19 +74,19 @@ class waypoint // best estimate of position and state
   On the Arduino, a float is the same as a double, giving 6 to 7 decimal digits.
   This means that mm resolution only applies within 1 km of the origin.
   */
-  int Evector_x1000;   // 1000 * unit vector pointing east
-  int Nvector_x1000;   // 1000 * unit vector pointing north
-//    int bearing;  // degrees. 0 = North; 90 = East.
+	long Evector_x1000;   // 1000 * unit vector pointing east
+  long Nvector_x1000;   // 1000 * unit vector pointing north
+  long bearing_deg;  // degrees. 0 = North; 90 = East.
     long speed_mmPs; // vehicle speed in mm per second.
     int index;       // used for passing a sequence of waypoints over serial line.
    
-    void Compute_mm();
-    void Compute_LatLon();
-//    bool AcquireGPRMC(unsigned long max_wait_ms);
-//    bool AcquireGPGGA(unsigned long max_wait_ms);
-//    void fuse(waypoint reading, int deltaT_ms);
-//    void SetTime(char *pTime, char * pDate);
-//    char* GetLatLon(char* parseptr);
+    void Compute_mm(Origin &origin);
+    void Compute_LatLon(Origin &origin);
+    bool AcquireGPRMC(unsigned long max_wait_ms);
+    bool AcquireGPGGA(unsigned long max_wait_ms);
+    void fuse(waypoint reading, int deltaT_ms, Origin &origin);
+    void SetTime(char *pTime, char * pDate);
+    char* GetLatLon(char* parseptr);
     char* formPointString();
     bool readPointString(unsigned long max_wait_ms, int channel);
     void   operator=(waypoint& other);
@@ -86,16 +94,22 @@ class waypoint // best estimate of position and state
     long  distance_mm(waypoint *other);
     void  vectors(waypoint *other);
     long  distance_mm(long east_mm, long north_mm);
-	
+		void Compute_EandN_Vectors(long heading);
 																//#ifdef MEGA
 // The following waypoint methods exist only on the C6 Navigator module.    
-    void fuse(waypoint GPS_reading, int deltaT_ms);
-    char* GetLatLon(char* parseptr);
-    bool AcquireGPRMC(unsigned long max_wait_ms);
-    bool AcquireGPGGA(unsigned long max_wait_ms);
-    void SetTime(char *pTime, char * pDate);
-																	//#endif
+//    void fuse(waypoint GPS_reading, int deltaT_ms);
+//    char* GetLatLon(char* parseptr);
+//    bool AcquireGPRMC(unsigned long max_wait_ms);
+//    bool AcquireGPGGA(unsigned long max_wait_ms);
+//    void SetTime(char *pTime, char * pDate);
+       
+                                                                //#endif
 };
+	void ComputePositionWithDR(waypoint &oldData, waypoint &newData);
+	void FindFuzzyCrossPointXY(waypoint &gps, waypoint &dr, waypoint &estimated_position);
+	double CrossPointX(double x1, double y1, double x2, double y2, double x3, double y3, double x4, double y4);
+	//Converts provided Longitude and Latitude to MM
+	//bool convertLatLonToMM(long latitude, long longitude);
 
 struct curve
 {
